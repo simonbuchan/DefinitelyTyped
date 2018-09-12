@@ -4,7 +4,7 @@ import * as ReactDOMServer from 'react-dom/server';
 
 import styled, {
     css,
-    injectGlobal,
+    createGlobalStyle,
     isStyledComponent,
     keyframes,
     ServerStyleSheet,
@@ -100,7 +100,7 @@ const theme = {
     main: 'mediumseagreen',
 };
 
-injectGlobal`
+const GlobalStyles = createGlobalStyle`
   @font-face {
       font-family: 'Operator Mono';
       src: url('../fonts/Operator-Mono.ttf');
@@ -115,6 +115,7 @@ class Example extends React.Component {
     render() {
         return (
             <ThemeProvider theme={theme}>
+                <GlobalStyles />
                 <Wrapper>
                     <Title>
                         Hello World, this is my first styled component!
@@ -140,7 +141,7 @@ const cssWithValues2 = css`
   font-weight: ${'bold'};
 `;
 // injectGlobal accepts simple interpolations if they're not using functions
-injectGlobal`
+const GlobalStyles2 = createGlobalStyle`
   ${'font-size'}: ${10}pt;
   ${cssWithValues1}
   ${[cssWithValues1, cssWithValues2]}
@@ -346,7 +347,7 @@ const ExtendButton = styled.button`
 `;
 
 // We're extending Button with some extra styles
-const TomatoExtendButton = ExtendButton.extend`
+const TomatoExtendButton = styled(ExtendButton)`
     color: tomato;
     border-color: tomato;
 `;
