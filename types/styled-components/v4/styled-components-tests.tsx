@@ -47,13 +47,16 @@ const Input = styled.input`
     }
 `;
 
+// $ExpectError Property 'nosuchelement' does not exist on type 'Styled<any>'.
+const NoSuchElement = styled.nosuchelement`
+`;
+
 interface MyTheme {
     primary: string;
 }
 
 interface ButtonProps {
     name: string;
-    primary?: boolean;
     theme: MyTheme;
 }
 
@@ -68,10 +71,14 @@ const TomatoButton = styled(MyButton)`
     border-color: tomato;
 `;
 
-const CustomizableButton = styled(MyButton)`
+interface PrimaryProps {
+    primary?: boolean;
+}
+
+const CustomizableButton1 = styled(MyButton)`
     /* Adapt the colors based on primary prop */
-    background: ${props => (props.primary ? 'palevioletred' : 'white')};
-    color: ${props => (props.primary ? 'white' : 'palevioletred')};
+    background: ${(props: PrimaryProps) => (props.primary ? 'palevioletred' : 'white')};
+    color: ${(props: PrimaryProps) => (props.primary ? 'white' : 'palevioletred')};
 
     font-size: 1em;
     margin: 1em;
@@ -79,6 +86,22 @@ const CustomizableButton = styled(MyButton)`
     border: 2px solid ${props => props.theme.primary};
     border-radius: 3px;
 `;
+
+interface CustomizableButtonProps extends ButtonProps, PrimaryProps {}
+const CustomizableButton2 = styled<CustomizableButtonProps>(MyButton)`
+    /* Adapt the colors based on primary prop */
+    background: ${props => (props.primary ? 'palevioletred' : 'white')};
+    color: ${props => (props.primary ? 'white' : 'palevioletred')};
+    border: 2px solid ${props => props.theme.primary};
+`;
+
+// $ExpectError Property 'noSuchProp' does not exist on type 'StyledProps<CustomizableButtonProps, any>'.
+const CustomizableButtonError1 = styled<CustomizableButtonProps>(MyButton)`
+    background: ${props => (props.noSuchProp ? 'palevioletred' : 'white')};
+`;
+
+// Not legal syntax :(
+// const CustomizableButton3 = styled(MyButton)<PrimaryProps>``;
 
 const example = css`
     font-size: 1.5em;
@@ -140,16 +163,34 @@ const cssWithValues2 = css`
   ${[cssWithValues1, cssWithValues1]}
   font-weight: ${'bold'};
 `;
-// injectGlobal accepts simple interpolations if they're not using functions
-const GlobalStyles2 = createGlobalStyle`
+
+// createGlobalStyles accepts simple interpolations
+const GlobalStylesSimple = createGlobalStyle`
   ${'font-size'}: ${10}pt;
   ${cssWithValues1}
   ${[cssWithValues1, cssWithValues2]}
 `;
 
+// ... but does not have any properties for functions
+// $ExpectError Property 'noSuchProp' does not exist on type 'never'.
+const GlobalStylesFunc = createGlobalStyle`
+    ${props => props.noSuchProp}
+`;
+
+// ... except for default theme?
+const GlobalStylesTheme = createGlobalStyle`
+    ${props => props.theme.primary}
+`;
+
+interface CssProps {
+    primary: string;
+}
+
 // css which uses function interpolations with common props
-const cssWithFunc1 = css`
+// tslint:disable-next-line:whitespace
+const cssWithFunc1 = css<CssProps>`
     font-size: ${props => props.theme.fontSizePt}pt;
+    color: ${props => props.primary}
 `;
 const cssWithFunc2 = css`
   ${cssWithFunc1}
@@ -162,12 +203,6 @@ const styledButton = styled.button`
   ${cssWithFunc1} ${[cssWithFunc1, cssWithFunc2]}
   ${() => [cssWithFunc1, cssWithFunc2]}
 `;
-// css with function interpolations cannot be used in injectGlobal
-/*
-injectGlobal`
-  ${cssWithFunc1}
-`;
-*/
 
 const name = 'hey';
 

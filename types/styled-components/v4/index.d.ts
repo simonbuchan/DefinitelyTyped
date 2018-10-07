@@ -6,165 +6,283 @@
 // Definitions: https://github.com/DefinitelyTyped/DefinitelyTyped
 // TypeScript Version: 2.8
 
-/// <reference types="node" />
-
 import * as React from 'react';
 
-export interface ThemeProps<T> {
-    theme: T;
+// v3 names, remove in v5
+/** @deprecated use StyledProps */
+export type ThemedStyledProps<Props, Theme> = StyledProps<Props, Theme>;
+/** @deprecated use OuterStyledProps */
+export type ThemedOuterStyledProps<Props, Theme> = OuterStyledProps<Props, Theme>;
+/** @deprecated Use InterpolationValue<P> */
+export type FlattenInterpolation<Props> = InterpolationValue<Props>;
+/** @deprecated Use InterpolationValue */
+export type SimpleInterpolation = InterpolationValue;
+/** @deprecated use StyledFunction */
+export type ThemedStyledFunction<Props, Theme, OuterProps = Props> =
+    StyledFunction<Props, Theme, OuterProps>;
+/** @deprecated Use Styled<Theme> */
+export type ThemedBaseStyledInterface<Theme> = Styled<Theme>;
+/** @deprecated Use Styled<Theme> */
+export type ThemedStyledInterface<Theme> = Styled<Theme>;
+/** @deprecated Use Styled */
+export type StyledInterface = Styled;
+/** @deprecated Use Css<Theme> */
+export type ThemedCssFunction<Theme> = Css<Theme>;
+/** @deprecated Use WithTheme<Theme> */
+export type WithThemeFnInterface<Theme> = WithTheme<Theme>;
+
+
+// Helper type operators:
+
+// The type "T - U", that is, "every element of T that is
+// not an element of U". For example:
+// ```
+// Diff<'a' | 'b' | 'c', 'b' | 'd'> = 'a' | 'c'
+// ```
+type Diff<T extends keyof any, U extends keyof any> =
+    ({ [P in T]: P } & { [P in U]: never })[T];
+
+// Remove a set of properties from T. For example:
+// ```
+// Omit<{ a: string, b: number }, 'b' | 'c'> = { a: string }
+// ```
+type Omit<T, K extends keyof T> = Pick<T, Diff<keyof T, K>>;
+
+// Return every property of T and U that is not in both. For example:
+// ```
+// DiffBetween<{ a: string, b: number }, { b: boolean, c: symbol }> =
+//   { a: string, c: symbol }
+// ```
+type DiffBetween<T, U> =
+    & Pick<T, Diff<keyof T, keyof U>>
+    & Pick<U, Diff<keyof U, keyof T>>;
+
+
+// An extension point for adding properties to the default theme
+// used by the standard exports (`styled`, `css`, etc.)
+// Use this pattern to add properties in your code:
+// ```
+// declare module "styled-components" {
+//     interface DefaultTheme {
+//         // Your properties here:
+//         primary: string;
+//     }
+// }
+// ```
+export interface DefaultTheme {}
+
+// Default export.
+// Provides styled component functions (StyledFunction<> below)
+// as props for each of the standard HTML elements, or when
+// called with a react type (either a DOM element type or a
+// component type)
+// This function, designed to be called as a ECMAScript tagged string
+// template, will then return the styled component wrapping the
+// original react type, adding the requested styles (or arbitrary other
+// props with .attr())
+// ```
+// import styled from 'styled-components'
+// const RedDiv = styled.div` color: red `;
+// const BoldRedDiv = styled(RedDiv)` font-weight: bold `;
+// const greeting = <BoldRedDiv>Hello!</BoldRedDiv>;
+// ```
+declare const styled: Styled;
+export default styled;
+export type Styled<Theme = DefaultTheme> =
+  & StyledIntrinsicsMap<Theme>
+  & StyledIntrinsicFunction<Theme>
+  & StyledComponentFunction<Theme>;
+
+// styled.div`...`
+type StyledIntrinsicsMap<Theme> = {
+    [Tag in keyof JSX.IntrinsicElements]:
+        StyledFunction<JSX.IntrinsicElements[Tag], Theme>
+};
+
+// styled('div')`...`
+interface StyledIntrinsicFunction<Theme> {
+    <Props, Tag extends keyof JSX.IntrinsicElements>(
+        tag: Tag,
+    ): StyledFunction<Props, Theme, Props & JSX.IntrinsicElements[Tag]>;
 }
 
-export type ThemedStyledProps<P, T> = P & ThemeProps<T>;
-export type StyledProps<P> = ThemedStyledProps<P, any>;
+// styled(MyButton)`...`
+interface StyledComponentFunction<Theme> {
+    <Props>(
+        type: React.ComponentType<Props>,
+    ): StyledFunction<Props, Theme, WithOptionalTheme<Props, Theme>>;
+}
 
-export type ThemedOuterStyledProps<P, T> = P & {
-    theme?: T;
-    as?: React.ReactType<P>;
+// The styled component function that, when called, will create the styled component.
+export interface StyledFunction<Props, Theme = any, OuterProps = Props> {
+    // styled.div`...` or styled(MyButton)`...`
+    (
+        strings: TemplateStringsArray,
+        ...interpolations: StyledInterpolationArray<Props, Theme>
+    ): StyledComponentClass<Props, Theme, OuterProps>;
+
+    // styled.div<MyProps>`... ${p => ...}` or
+    // styled(MyButton)`... ${(p: MyProps) => ...}`
+    <StyleFunctionProps>(
+        strings: TemplateStringsArray,
+        ...interpolations: StyledInterpolationArray<Props & StyleFunctionProps, Theme>
+    ): StyledComponentClass<
+        Props & StyleFunctionProps,
+        Theme,
+        OuterProps & StyleFunctionProps
+    >;
+
+    // styled.x.attrs(p => ...)`...` or
+    // styled.x.attrs<P>(p => ...)`...`
+    attrs<
+        StyleFunctionProps,
+        AttrProps extends Partial<Props & StyleFunctionProps> = {}
+    >(
+        attrs: Attrs<Props & StyleFunctionProps, AttrProps, Theme>,
+    ): StyledFunction<
+        DiffBetween<AttrProps, Props & StyleFunctionProps>,
+        Theme,
+        DiffBetween<AttrProps, OuterProps & StyleFunctionProps>
+    >;
+}
+
+
+// Result type of StyledFunction<> (e.g. the type of styled components)
+export interface StyledComponentClass<Props, Theme, OuterProps = Props>
+    extends React.ComponentClass<OuterStyledProps<OuterProps, Theme>> {
+    // Note that this should be using React.ComponentType<>, as v4 uses
+    // forwardRef() and that is the type returned in the react typings,
+    // but for some reason TypeScript refuses to then infer StyleFunctionProps
+    // in StyledFunction<> above, apparantly as it is returning a generic
+    // function type.
+
+    // const MyLabel = MyDiv.withComponent('label')
+    // Prefer using `<MyDiv as="label" />` if possible
+    withComponent<Tag extends keyof JSX.IntrinsicElements>(
+        tag: Tag,
+    ): StyledComponentClass<
+        JSX.IntrinsicElements[Tag],
+        Theme,
+        JSX.IntrinsicElements[Tag] & OuterProps
+    >;
+
+    // const MyButton = MyDiv.withComponent(MyButton)
+    // Prefer using `<MyDiv as={MyButton} />` if possible
+    withComponent<InnerProps>(
+        element: React.ComponentType<InnerProps>,
+    ): StyledComponentClass<InnerProps, Theme, InnerProps & OuterProps>;
+}
+
+// Allows sharing CSS between components, even when it uses interpolations:
+// ```
+// import { css } from 'styled-components';
+// const buttonStyles = css<ButtonProps>`
+//   background: ${props => props.active ? 'green' : 'red'}
+// `;
+// const MyButton = styled.button`border: 0; ${buttonStyles}`;
+// const ItemButton = styled.li`list-style: none; ${buttonStyles}`;
+// ```
+export const css: Css;
+export interface Css<Theme = DefaultTheme> {
+    <InterpolationProps>(
+        strings: TemplateStringsArray,
+        ...interpolations:
+            StyledInterpolationArray<InterpolationProps, Theme>
+    ): StyledInterpolationArray<InterpolationProps, Theme>;
+}
+
+
+export const ThemeProvider: ThemeProviderComponent<object>;
+export type ThemeProviderComponent<Theme> =
+    React.ComponentClass<ThemeProviderProps<Theme>>;
+export interface ThemeProviderProps<T> {
+    theme?: T | ((theme: T) => T);
+}
+
+
+export const ThemeConsumer: ThemeConsumerComponent<object>;
+export type ThemeConsumerComponent<Theme> =
+    React.ComponentClass<ThemeConsumerProps<Theme>>;
+export interface ThemeConsumerProps<T> {
+    children(theme: T): React.ReactNode;
+}
+
+// Internal shorthand for common type for interpolations of StyledFunction<> and Css<>
+type StyledInterpolationArray<Props, Theme> =
+    Array<Interpolation<StyledProps<Props, RelaxEmptyTheme<Theme>>>>;
+
+// Type of `attrs()` args
+type Attrs<Props, AttrProps extends Partial<Props>, Theme> = {
+    [K in keyof AttrProps]: ((props: StyledProps<Props, Theme>) => AttrProps[K]) | AttrProps[K]
 };
-export type OuterStyledProps<P> = ThemedOuterStyledProps<P, any>;
 
-export type FalseyValue = undefined | null | false;
-export type Interpolation<P> =
-    | FlattenInterpolation<P>
-    | ReadonlyArray<
-          FlattenInterpolation<P> | ReadonlyArray<FlattenInterpolation<P>>
-      >;
-export type FlattenInterpolation<P> =
-    | InterpolationValue
-    | InterpolationFunction<P>;
-export type InterpolationValue =
+
+// Common props provided by the styled component theming
+export interface ThemeProps<Theme> { theme: Theme; }
+
+// Props available within a style interpolation function or provided to
+// a wrapped component.
+export type StyledProps<Props, Theme = any> = Props & ThemeProps<Theme>;
+
+// Props available to be passed to a component (e.g. `this.props`)
+export type OuterStyledProps<Props, Theme = any> = Props & Partial<ThemeProps<Theme>>;
+
+// The type of the expressions within style interpolation
+// sections, that is, the x in styled.div` ${x} `
+// They allow arbitrary array recursion.
+export type Interpolation<Props> =
+    | InterpolationValue<Props>
+    | InterpolationArrayRecursion<Props>;
+export interface InterpolationArrayRecursion<Props>
+    extends ReadonlyArray<Interpolation<Props>> {}
+
+// The actual values to be rendered into the style. Can
+// be raw CSS text or as an object, or generated from a callback
+export type InterpolationValue<Props = never> =
+    | FalseyValue
     | string
     | number
     | Styles
-    | FalseyValue
-    | StyledComponentType<any, any>;
-export type SimpleInterpolation =
-    | InterpolationValue
-    | ReadonlyArray<InterpolationValue | ReadonlyArray<InterpolationValue>>;
+    | InterpolationFunction<Props>
+    | StyledComponentClass<any, any>;
+
+// Using CSS as an object, for example:
+// ```
+// styled.div`${{ color: 'red' }}`
+// ```
+// is equivalent to:
+// ```
+// styled.div`color: red`
+// ```
 export interface Styles {
     [ruleOrSelector: string]: string | number | Styles;
 }
 
-export type InterpolationFunction<P> = (props: P) => Interpolation<P>;
+// Accepted and ignored values that allow using conditional
+// styles with the idiom: `condition && value`
+export type FalseyValue = undefined | null | false;
 
-type Attrs<P, A extends Partial<P>, T> = {
-    [K in keyof A]: ((props: ThemedStyledProps<P, T>) => A[K]) | A[K]
-};
-
-export type StyledComponentType<P, T, O = P> = React.ComponentType<ThemedOuterStyledProps<O, T>> & {
-    /** @deprecated prefer using 'as' prop if possible */
-    withComponent<K extends keyof JSX.IntrinsicElements>(
-        tag: K,
-    ): StyledComponentType<
-        JSX.IntrinsicElements[K],
-        T,
-        JSX.IntrinsicElements[K] & O
-    >;
-    /** @deprecated prefer using 'as' prop if possible */
-    withComponent<U = {}>(
-        element: React.ComponentType<U>,
-    ): StyledComponentType<U, T, U & O>;
+// Interpolation props can also be functions which receive
+// the props passed to the rendered element
+export interface InterpolationFunction<Props> {
+    (props: Props): Interpolation<Props>;
 }
 
-export interface ThemedStyledFunction<P, T, O = P> {
-    (
-        strings: TemplateStringsArray,
-        ...interpolations: Array<Interpolation<ThemedStyledProps<P, T>>>
-    ): StyledComponentType<P, T, O>;
-    <U>(
-        strings: TemplateStringsArray,
-        ...interpolations: Array<Interpolation<ThemedStyledProps<P & U, T>>>
-    ): StyledComponentType<P & U, T, O & U>;
-    attrs<U, A extends Partial<P & U> = {}>(
-        attrs: Attrs<P & U, A, T>,
-    ): ThemedStyledFunction<DiffBetween<A, P & U>, T, DiffBetween<A, O & U>>;
+// Replaces empty themes, such as an unmodified DefaultTheme, with `any`
+// so that by default the `theme` property has type `any` in styled callbacks
+type RelaxEmptyTheme<Theme> =
+    Extract<keyof Theme, string> extends never ? any : Theme;
+
+type WithOptionalTheme<Props extends { theme?: Theme }, Theme> =
+    & Omit<Props, 'theme'>
+    & { theme?: Theme; };
+
+export interface WithTheme<Theme = DefaultTheme> {
+    <Props extends { theme?: RelaxEmptyTheme<Theme> }>(
+        component: React.ComponentType<Props>,
+    ): React.ComponentClass<WithOptionalTheme<Props, Theme>>;
 }
-
-export type StyledFunction<P> = ThemedStyledFunction<P, any>;
-
-type ThemedStyledComponentFactories<T> = {
-    [TTag in keyof JSX.IntrinsicElements]: ThemedStyledFunction<
-        JSX.IntrinsicElements[TTag],
-        T
-    >
-};
-
-export interface ThemedBaseStyledInterface<T>
-    extends ThemedStyledComponentFactories<T> {
-    <P, TTag extends keyof JSX.IntrinsicElements>(
-        tag: TTag,
-    ): ThemedStyledFunction<P, T, P & JSX.IntrinsicElements[TTag]>;
-    <P, O>(component: StyledComponentType<P, T, O>): ThemedStyledFunction<
-        P,
-        T,
-        O
-    >;
-    <P extends { [prop: string]: any; theme?: T }>(
-        component: React.ComponentType<P>,
-    ): ThemedStyledFunction<P, T, WithOptionalTheme<P, T>>;
-}
-
-export type ThemedStyledInterface<T> = ThemedBaseStyledInterface<Extract<keyof T, string> extends never ? any : T>;
-export type StyledInterface = ThemedStyledInterface<DefaultTheme>;
-// tslint:disable-next-line:no-empty-interface
-export interface DefaultTheme {}
-
-export interface ThemeProviderProps<T> {
-    theme?: T | ((theme: T) => T);
-}
-export type BaseThemeProviderComponent<T> = React.ComponentClass<
-    ThemeProviderProps<T>
-    >;
-export type ThemeProviderComponent<T> = BaseThemeProviderComponent<Extract<keyof T, string> extends never ? any : T>;
-export interface BaseThemedCssFunction<T> {
-    (
-        strings: TemplateStringsArray,
-        ...interpolations: SimpleInterpolation[]
-    ): InterpolationValue[];
-    <P>(
-        strings: TemplateStringsArray,
-        ...interpolations: Array<Interpolation<ThemedStyledProps<P, T>>>
-    ): Array<FlattenInterpolation<ThemedStyledProps<P, T>>>;
-}
-export type ThemedCssFunction<T> = BaseThemedCssFunction<Extract<keyof T, string> extends never ? any : T>;
-
-// Helper type operators
-type KeyofBase = keyof any;
-type Diff<T extends KeyofBase, U extends KeyofBase> = ({ [P in T]: P } &
-    { [P in U]: never })[T];
-type Omit<T, K extends keyof T> = Pick<T, Diff<keyof T, K>>;
-type DiffBetween<T, U> = Pick<T, Diff<keyof T, keyof U>> &
-    Pick<U, Diff<keyof U, keyof T>>;
-type WithOptionalTheme<P extends { theme?: T }, T> = Omit<P, 'theme'> & {
-    theme?: T;
-};
-
-export interface ThemedStyledComponentsModule<T> {
-    default: ThemedStyledInterface<T>;
-
-    css: ThemedCssFunction<T>;
-    keyframes(
-        strings: TemplateStringsArray,
-        ...interpolations: SimpleInterpolation[]
-    ): Keyframes;
-    createGlobalStyle(
-        strings: TemplateStringsArray,
-        ...interpolations: SimpleInterpolation[]
-    ): React.ReactType;
-    withTheme: WithThemeFnInterface<T>;
-
-    ThemeProvider: ThemeProviderComponent<T>;
-}
-
-declare const styled: StyledInterface;
-
-export const css: ThemedCssFunction<DefaultTheme>;
-
-export type BaseWithThemeFnInterface<T> = <P extends { theme?: T }>(
-        component: React.ComponentType<P>,
-    ) => React.ComponentClass<WithOptionalTheme<P, T>>;
-export type WithThemeFnInterface<T> = BaseWithThemeFnInterface<Extract<keyof T, string> extends never ? any : T>;
-export const withTheme: WithThemeFnInterface<DefaultTheme>;
+export const withTheme: WithTheme;
 
 export interface Keyframes {
     getName(): string;
@@ -182,9 +300,7 @@ export function createGlobalStyle(
 
 export function isStyledComponent(
     target: any,
-): target is StyledComponentType<{}, {}>;
-
-export const ThemeProvider: ThemeProviderComponent<object>;
+): target is StyledComponentClass<{}, {}>;
 
 interface StylesheetComponentProps {
     sheet: ServerStyleSheet;
@@ -195,9 +311,8 @@ interface StyleSheetManagerProps {
     target?: Node;
 }
 
-export class StyleSheetManager extends React.Component<
-    StyleSheetManagerProps
-> {}
+export class StyleSheetManager
+    extends React.Component<StyleSheetManagerProps> {}
 
 export class ServerStyleSheet {
     collectStyles(
@@ -212,5 +327,20 @@ export class ServerStyleSheet {
     instance: StyleSheet;
 }
 
-export default styled;
+export interface ThemedStyledComponentsModule<Theme> {
+    default: Styled<Theme>;
 
+    css: Css<Theme>;
+    keyframes(
+        strings: TemplateStringsArray,
+        ...interpolations: SimpleInterpolation[]
+    ): Keyframes;
+    createGlobalStyle(
+        strings: TemplateStringsArray,
+        ...interpolations: SimpleInterpolation[]
+    ): React.ReactType;
+    withTheme: WithTheme<Theme>;
+
+    ThemeProvider: ThemeProviderComponent<Theme>;
+    ThemeConsumer: ThemeConsumerComponent<Theme>;
+}
